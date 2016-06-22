@@ -26,6 +26,8 @@ int main()
     mi.addIndex_Hashed_Unique(&People::email);
     mi.addIndex_Ordered_NonUnique(&People::name, &People::age, &People::height); // A composition cannot be hashed type
 
+    // mi.reserve(7); // Best performance for insert
+
     mi.addData(People(0, "Rafael", "rafa1@email.com", 35, 1.70));
     mi.addData(People(1, "Fernanda", "fer1@email.com", 28, 1.62));
     mi.addData(People(2, "Rafael", "rafa2@email.com", 35, 1.64));

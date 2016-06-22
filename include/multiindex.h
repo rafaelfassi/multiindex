@@ -23,7 +23,7 @@
 */
 
 /************************
-* Alpha version: 1.0.001
+* Alpha version: 1.0.002
 *************************/
 
 #ifndef MULTIINDEX
@@ -51,13 +51,16 @@ public:
         virtual bool is_end() = 0;
         virtual const T& key() = 0;
         virtual C& value() = 0;
+        virtual size_t idx() = 0;
     };
 
     class IndexBase
     {
     public:
         virtual ~IndexBase() {}
-        virtual void setValue(size_t idx, C *) = 0;
+        virtual void reserve(size_t size) = 0;
+        virtual void setValue(size_t idx, C *cl) = 0;
+        virtual void remove(size_t idx)  = 0;
     };
 
     template <typename T>
@@ -65,7 +68,6 @@ public:
     {
     public:
         Index(ClsT &_cls) : cls(_cls) {}
-        virtual void setValue(size_t idx, C *cl) = 0;
         virtual C* findFirst(const T &) = 0;
         virtual std::shared_ptr<Iterator<T>> begin() = 0;
         virtual std::shared_ptr<Iterator<T>> rbegin() = 0;
@@ -95,6 +97,7 @@ private:
         virtual bool is_end() { return (it == data.end()); }
         virtual const T& key() { return it->first; }
         virtual C& value() { return cls.at(it->second); }
+        virtual size_t idx() { return it->second; }
     };
 
     template <typename T, typename U>
@@ -115,6 +118,7 @@ private:
         virtual bool is_end() { return (it == data.rend()); }
         virtual const T& key() { return it->first; }
         virtual C& value() { return cls.at(it->second); }
+        virtual size_t idx() { return it->second; }
     };
 
     template <typename T, typename U>
@@ -122,6 +126,7 @@ private:
     {
     public:
         IndexSingle(ClsT &_cls, T C::* _filed) : Index<T>(_cls), filed(_filed) {}
+
         virtual void setValue(size_t idx, C *cl)
         {
                 data.insert(std::pair<T, size_t>(cl->*this->filed, idx));
@@ -134,6 +139,29 @@ private:
                 return &this->cls.at(it->second);
             else
                 return 0;
+        }
+
+        virtual void remove(size_t idx)
+        {
+            typename U::iterator it = data.begin();
+            while (it != data.end())
+            {
+                if (it->second < idx)
+                {
+                    ++it;
+                    continue;
+                }
+                else if(it->second != idx)
+                {
+                    --it->second;
+                    ++it;
+                    continue;
+                }
+                else
+                {
+                    it = data.erase(it);
+                }
+            }
         }
 
         virtual std::shared_ptr<Iterator<T>> begin()
@@ -176,17 +204,28 @@ private:
     public:
         IndexSingleMap(ClsT &_cls, T C::* _filed) : IndexSingle<T, U>(_cls, _filed) {}
 
+        virtual void reserve(size_t size)
+        {
+            (void)size;
+        }
+
         virtual std::shared_ptr<Iterator<T>> rbegin()
         {
             return std::make_shared<IteratorBackward<T, U>>(this->cls, this->data, this->data.rbegin());
         }
     };
 
+
     template <typename T, typename U>
     class IndexSingleHash : public IndexSingle<T, U>
     {
     public:
         IndexSingleHash(ClsT &_cls, T C::* _filed) : IndexSingle<T, U>(_cls, _filed) {}
+
+        virtual void reserve(size_t size)
+        {
+            this->data.reserve(size);
+        }
 
         virtual std::shared_ptr<Iterator<T>> rbegin()
         {
@@ -214,6 +253,11 @@ private:
             std::get<0>(v) = c->*std::get<0>(f);
         }
 
+        virtual void reserve(size_t size)
+        {
+            (void)size;
+        }
+
         virtual void setValue(size_t idx, C *cl)
         {
             T tpVal;
@@ -238,6 +282,29 @@ private:
                 return &this->cls.at(it->second);
             else
                 return 0;
+        }
+
+        virtual void remove(size_t idx)
+        {
+            typename U::iterator it = data.begin();
+            while (it != data.end())
+            {
+                if (it->second < idx)
+                {
+                    ++it;
+                    continue;
+                }
+                else if(it->second != idx)
+                {
+                    --it->second;
+                    ++it;
+                    continue;
+                }
+                else
+                {
+                    it = data.erase(it);
+                }
+            }
         }
 
         virtual std::shared_ptr<Iterator<T>> find(const T &val)
@@ -274,8 +341,8 @@ public:
         {
             IndexBase *p = m_idxs[i];
             p->setValue(m_cls.size(), pCl);
-            m_cls.push_back(*pCl);
         }
+        m_cls.push_back(*pCl);
     }
 
     template<class T>
@@ -378,6 +445,24 @@ public:
                 return idx;
         }
         return 0;
+    }
+
+    void reserve(size_t size)
+    {
+        m_cls.reserve(size);
+        for (typename IdxsT::iterator it = m_idxs.begin(); it != m_idxs.end(); ++it)
+            (*it)->reserve(size);
+    }
+
+    template<typename T>
+    void remove(std::shared_ptr<Iterator<T>> i)
+    {
+        if(!i->is_end())
+        {
+            m_cls.erase(m_cls.begin() + i->idx());
+            for (typename IdxsT::iterator it = m_idxs.begin(); it != m_idxs.end(); ++it)
+                (*it)->remove(i->idx());
+        }
     }
 
 private:
